@@ -6,7 +6,7 @@ export default function App() {
 
   useEffect(() => {
     if (!world.isServer) return
-    return world.on('death', msg => {
+    return world.on('hfy-death', msg => {
       const { uid } = msg
       const avatar = world.getAvatar(uid)
       if (!avatar) return console.error('no avatar to kill')

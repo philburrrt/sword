@@ -15,7 +15,8 @@ import {
 const v1 = new Vector3()
 const e1 = new Euler()
 
-const DEFAULT_MODEL = 'sword.glb'
+const DEFAULT_MODEL = 'katana.glb'
+const DEFAULT_HOLDER_MODEL = 'holder.glb'
 const DEFAULT_EQUIP_AUDIO = 'SwordEquip.mp3'
 const DEFAULT_SWING_AUDIO = 'SwordSwing.mp3'
 
@@ -32,19 +33,23 @@ export default function App() {
     sheathedPosition,
     sheathedRotation,
     swordModel,
+    holderModel,
     equipAudio,
     swingAudio,
+    minDamage,
+    maxDamage,
   } = useFields()
   const [s, dispatch] = useSyncState(s => s)
   const { holder, mode, health, deadHolder } = s
   const swingSfx = useFile(swingAudio) || DEFAULT_SWING_AUDIO
   const equipSfx = useFile(equipAudio) || DEFAULT_EQUIP_AUDIO
   const sword = useFile(swordModel) || DEFAULT_MODEL
+  const holderMdl = useFile(holderModel) || DEFAULT_HOLDER_MODEL
 
   useEffect(() => {
     if (!world.isServer) return
     if (!deadHolder) return
-    world.emit('death', { uid: deadHolder })
+    world.emit('hfy-death', { uid: deadHolder })
   }, [deadHolder])
 
   // * Attaches sword to parts of the body * //
@@ -66,6 +71,8 @@ export default function App() {
     } else if (mode === 'sheathed') {
       return world.onUpdate(delta => {
         const avatar = world.getAvatar(holder)
+        avatar.getBonePosition('head', v1)
+        healthBar.setPosition(v1)
         avatar.getBonePosition('hips', v1)
         sword.setPosition(v1)
         avatar.getBoneRotation('hips', e1)
@@ -96,8 +103,8 @@ export default function App() {
       const ray = avatar.getRay()
       const hit = world.raycast(ray)
       if (hit?.entity.isAvatar) {
-        const dmg = randomInt(33, 66)
-        world.emit('attack', { uid: hit.entity.uid, dmg })
+        const dmg = randomInt(minDamage, maxDamage)
+        world.emit('katana-attack', { uid: hit.entity.uid, dmg })
       }
       const action = lastAction === 'attack1' ? 'attack2' : 'attack1'
       world.emote(action)
@@ -152,22 +159,19 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    return world.on('attack', ({ uid, dmg }) => {
+    return world.on('katana-attack', ({ uid, dmg }) => {
       dispatch('damage', uid, dmg)
     })
   }, [])
 
+  function onHolderClick(e) {
+    if (!holder) return
+    const { uid } = e.avatar
+    dispatch('unequip', uid)
+  }
+
   return (
     <app>
-      <box
-        position={[-2, 0, 0]}
-        color="black"
-        scale={[0.1, 0.1, 0.1]}
-        onPointerDown={e => {
-          const { uid } = e.avatar
-          dispatch('unequip', uid)
-        }}
-      />
       <emote id="attack1" src="Stable Sword Outward Slash.fbx" upperBody />
       <emote id="attack2" src="Stable Sword Inward Slash.fbx" upperBody />
       {holder ? (
@@ -206,14 +210,20 @@ export default function App() {
         </>
       ) : (
         <model
-          src="sword.glb"
+          src="katana.glb"
           onPointerDown={e => {
             const { uid } = e.avatar
             dispatch('equip', uid)
             world.emit('held', { entityId })
           }}
+          onPointerDownHint="Equip"
         />
       )}
+      <model
+        src={holderMdl}
+        onPointerDown={holder ? onHolderClick : null}
+        onPointerDownHint="Unequip"
+      />
     </app>
   )
 }
@@ -269,6 +279,24 @@ export function getStore(state = initialState) {
         accept: '.glb',
       },
       {
+        key: 'holderModel',
+        label: 'Holder Model',
+        type: 'file',
+        accept: '.glb',
+      },
+      {
+        key: 'maxDamage',
+        label: 'Max Damage',
+        type: 'float',
+        initial: 66,
+      },
+      {
+        key: 'minDamage',
+        label: 'Min Damage',
+        type: 'float',
+        initial: 33,
+      },
+      {
         key: 'equipAudio',
         label: 'Equip Sound',
         type: 'file',
@@ -297,14 +325,14 @@ export function getStore(state = initialState) {
         label: 'Sheathed Position',
         type: 'vec3',
         // initial: [0, 0, 0],
-        initial: [0.2, 0, -0.2],
+        initial: [0.15, 0.1, -0.2],
       },
       {
         key: 'sheathedRotation',
         label: 'Sheathed Rotation',
         type: 'vec3',
         // initial: [0, 0, 0],
-        initial: [0.2, -3, 0.9],
+        initial: [0.2, -3, 5],
       },
     ],
   }
