@@ -47,6 +47,7 @@ export default function App() {
     if (!world.isServer) return
     if (!deadHolder) return
     world.emit('hfy-death', { uid: deadHolder })
+    dispatch('resetDeath')
   }, [deadHolder])
 
   // * Attaches sword to parts of the body * //
@@ -229,6 +230,9 @@ export function getStore(state = initialState) {
           state.holder = null
           state.deadHolder = holder
         }
+      },
+      resetDeath(state) {
+        state.deadHolder = null
       },
       reset(state) {
         state.holder = null

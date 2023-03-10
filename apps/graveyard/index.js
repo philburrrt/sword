@@ -8,6 +8,7 @@ export default function App() {
     if (!world.isServer) return
     return world.on('hfy-death', msg => {
       const { uid } = msg
+      console.log(`teleporting ${uid} to graveyard`)
       const avatar = world.getAvatar(uid)
       if (!avatar) return console.error('no avatar to kill')
       avatar.teleport('graveyard')
