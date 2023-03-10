@@ -10,13 +10,10 @@ import {
   useEntityUid,
 } from 'hyperfy'
 
-// TODO: Obfuscate event names
-
 const v1 = new Vector3()
 const e1 = new Euler()
 
 const DEFAULT_MODEL = 'katana.glb'
-const DEFAULT_HOLDER_MODEL = 'holder.glb'
 const DEFAULT_EQUIP_AUDIO = 'SwordEquip.mp3'
 const DEFAULT_SWING_AUDIO = 'SwordSwing.mp3'
 
@@ -28,23 +25,23 @@ export default function App() {
   const swingRef = useRef()
   const healthBarRef = useRef()
   const {
-    activePosition,
-    activeRotation,
-    sheathedPosition,
-    sheathedRotation,
+    pos,
+    rot,
+    mountedPos,
+    mountedRot,
+    scale,
     swordModel,
-    holderModel,
     equipAudio,
     swingAudio,
     minDamage,
     maxDamage,
   } = useFields()
   const [s, dispatch] = useSyncState(s => s)
-  const { holder, mode, health, deadHolder } = s
+  const { holder, health, deadHolder } = s
   const swingSfx = useFile(swingAudio) || DEFAULT_SWING_AUDIO
   const equipSfx = useFile(equipAudio) || DEFAULT_EQUIP_AUDIO
   const sword = useFile(swordModel) || DEFAULT_MODEL
-  const holderMdl = useFile(holderModel) || DEFAULT_HOLDER_MODEL
+  const localUser = world.getAvatar()?.uid
 
   useEffect(() => {
     if (!world.isServer) return
@@ -58,45 +55,29 @@ export default function App() {
     if (!holder) return
     const sword = swordRef.current
     const healthBar = healthBarRef.current
-    if (mode === 'active') {
-      return world.onUpdate(delta => {
-        const avatar = world.getAvatar(holder)
-        avatar.getBonePosition('head', v1)
-        healthBar.setPosition(v1)
-        avatar.getBonePosition('rightHand', v1)
-        sword.setPosition(v1)
-        avatar.getBoneRotation('rightHand', e1)
-        sword.setRotation(e1)
-      })
-    } else if (mode === 'sheathed') {
-      return world.onUpdate(delta => {
-        const avatar = world.getAvatar(holder)
-        avatar.getBonePosition('head', v1)
-        healthBar.setPosition(v1)
-        avatar.getBonePosition('hips', v1)
-        sword.setPosition(v1)
-        avatar.getBoneRotation('hips', e1)
-        sword.setRotation(e1)
-      })
-    }
-  }, [holder, mode])
+    return world.onUpdate(delta => {
+      const avatar = world.getAvatar(holder)
+      avatar.getBonePosition('head', v1)
+      healthBar.setPosition(v1)
+      avatar.getBonePosition('rightHand', v1)
+      sword.setPosition(v1)
+      avatar.getBoneRotation('rightHand', e1)
+      sword.setRotation(e1)
+    })
+  }, [holder])
 
   // * Handles attacks and sheathing * //
   // only should run if local player is holding the sword
   useEffect(() => {
     if (!world.isClient) return
-    if (world.getAvatar()?.uid !== holder) return
+    if (!holder || holder !== localUser) return
+    const pickupTime = world.getTime()
     const swingSfx = swingRef.current
-    const equipSfx = equipRef.current
-    if (mode === 'active') {
-      equipSfx.play(true)
-    } else if (mode === 'sheathed') {
-      equipSfx.play(true)
-    }
-    let longPressTimer = null
     let nextAllowedAttack = -9999
     let lastAction = 'attack1'
-    function doAttack() {
+    function onPointerUp(e) {
+      if (pickupTime + 0.5 > world.getTime()) return
+      if (!holder) return
       const time = world.getTime()
       if (nextAllowedAttack > time) return
       const avatar = world.getAvatar()
@@ -112,23 +93,6 @@ export default function App() {
       nextAllowedAttack = time + 0.5
       lastAction = action
     }
-    function doToggleMode() {
-      dispatch(mode === 'active' ? 'deactivate' : 'activate')
-    }
-    function onPointerDown(event) {
-      if (!mode) return
-      longPressTimer = setTimeout(() => {
-        longPressTimer = null
-        doToggleMode()
-      }, 500)
-    }
-    function onPointerUp(event) {
-      if (!longPressTimer) return // long press happened
-      clearTimeout(longPressTimer)
-      longPressTimer = null
-      if (mode !== 'active') return
-      doAttack()
-    }
     const onSomethingHeld = msg => {
       // semi-standard event called when any app "holds" an item
       // so that people don't hold multiple items in their hand
@@ -136,15 +100,13 @@ export default function App() {
         dispatch('reset')
       }
     }
-    world.on('pointer-down', onPointerDown)
     world.on('pointer-up', onPointerUp)
     world.on('held', onSomethingHeld)
     return () => {
-      world.off('pointer-down', onPointerDown)
       world.off('pointer-up', onPointerUp)
       world.off('held', onSomethingHeld)
     }
-  }, [mode])
+  }, [holder])
 
   useEffect(() => {
     if (!world.isServer) return
@@ -163,12 +125,6 @@ export default function App() {
       dispatch('damage', uid, dmg)
     })
   }, [])
-
-  function onHolderClick(e) {
-    if (!holder) return
-    const { uid } = e.avatar
-    dispatch('unequip', uid)
-  }
 
   return (
     <app>
@@ -200,30 +156,50 @@ export default function App() {
               <model
                 layer="HELD"
                 src={sword}
-                position={mode === 'active' ? activePosition : sheathedPosition}
-                rotation={mode === 'active' ? activeRotation : sheathedRotation}
+                position={pos}
+                rotation={rot}
+                scale={scale}
               />
-              <audio ref={equipRef} src={equipSfx} spatial />
               <audio ref={swingRef} src={swingSfx} spatial />
             </group>
           </global>
         </>
       ) : (
-        <model
-          src="katana.glb"
-          onPointerDown={e => {
-            const { uid } = e.avatar
-            dispatch('equip', uid)
-            world.emit('held', { entityId })
-          }}
-          onPointerDownHint="Equip"
-        />
+        <>
+          <model
+            src={sword}
+            onPointerDown={e => {
+              const { uid } = e.avatar
+              dispatch('equip', uid)
+              const sfx = equipRef.current
+              sfx.play(true)
+              world.emit('held', { entityId })
+            }}
+            onPointerDownHint="Equip"
+            position={mountedPos}
+            rotation={mountedRot}
+            scale={scale}
+          />
+          <audio ref={equipRef} src={equipSfx} spatial />
+        </>
       )}
-      <model
-        src={holderMdl}
-        onPointerDown={holder ? onHolderClick : null}
-        onPointerDownHint="Unequip"
-      />
+      {holder !== localUser && <model src="holder.glb" />}
+      {holder && holder === localUser && (
+        <>
+          <model
+            src={'holder-owned.glb'}
+            onPointerDown={e => {
+              if (!holder) return
+              const { uid } = e.avatar
+              dispatch('unequip', uid)
+              const sfx = equipRef.current
+              sfx.play(true)
+            }}
+            onPointerDownHint="Unequip"
+          />
+          <audio ref={equipRef} src={equipSfx} spatial />
+        </>
+      )}
     </app>
   )
 }
@@ -231,7 +207,6 @@ export default function App() {
 const initialState = {
   holder: null,
   health: null,
-  mode: null, // active, sheathed
   deadHolder: null,
 }
 
@@ -242,31 +217,21 @@ export function getStore(state = initialState) {
       equip(state, holder) {
         state.holder = holder
         state.health = 100
-        state.mode = 'active'
       },
       unequip(state, holder) {
         if (state.holder !== holder) return
         state.holder = null
-        state.mode = null
-      },
-      activate(state) {
-        state.mode = 'active'
-      },
-      deactivate(state) {
-        state.mode = 'sheathed'
       },
       damage(state, holder, dmg) {
         if (state.holder !== holder) return
         state.health -= dmg
         if (state.health <= 0) {
           state.holder = null
-          state.mode = null
           state.deadHolder = holder
         }
       },
       reset(state) {
         state.holder = null
-        state.mode = null
         state.deadHolder = null
         state.health = null
       },
@@ -279,10 +244,10 @@ export function getStore(state = initialState) {
         accept: '.glb',
       },
       {
-        key: 'holderModel',
-        label: 'Holder Model',
-        type: 'file',
-        accept: '.glb',
+        key: 'scale',
+        label: 'Scale',
+        type: 'float',
+        initial: 1.0,
       },
       {
         key: 'maxDamage',
@@ -309,30 +274,28 @@ export function getStore(state = initialState) {
         accept: '.mp3',
       },
       {
-        key: 'activePosition',
-        label: 'Active Position',
+        key: 'pos',
+        label: 'Position',
+        type: 'vec3',
+        initial: [0.07, -0.07, 0],
+      },
+      {
+        key: 'rot',
+        label: 'Rotation',
+        type: 'vec3',
+        initial: [-1.2, 0, 1.4],
+      },
+      {
+        key: 'mountedPos',
+        label: 'Mounted Position',
         type: 'vec3',
         initial: [0, 0, 0],
       },
       {
-        key: 'activeRotation',
-        label: 'Active Rotation',
+        key: 'mountedRot',
+        label: 'Mounted Rotation',
         type: 'vec3',
         initial: [0, 0, 0],
-      },
-      {
-        key: 'sheathedPosition',
-        label: 'Sheathed Position',
-        type: 'vec3',
-        // initial: [0, 0, 0],
-        initial: [0.15, 0.1, -0.2],
-      },
-      {
-        key: 'sheathedRotation',
-        label: 'Sheathed Rotation',
-        type: 'vec3',
-        // initial: [0, 0, 0],
-        initial: [0.2, -3, 5],
       },
     ],
   }
