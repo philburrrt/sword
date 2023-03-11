@@ -10,6 +10,9 @@ import {
   useEntityUid,
 } from 'hyperfy'
 
+// TODO: Add regen & field
+// TODO: Add hit speed field
+
 const v1 = new Vector3()
 const e1 = new Euler()
 
@@ -35,6 +38,8 @@ export default function App() {
     swingAudio,
     minDamage,
     maxDamage,
+    attackSpeed,
+    attackRange,
   } = useFields()
   const [s, dispatch] = useSyncState(s => s)
   const { holder, health, deadHolder } = s
@@ -74,8 +79,8 @@ export default function App() {
     if (!holder || holder !== localUser) return
     const pickupTime = world.getTime()
     const swingSfx = swingRef.current
-    let nextAllowedAttack = -9999
     let lastAction = 'attack1'
+    let nextAllowedAttack = -9999
     function onPointerUp(e) {
       if (pickupTime + 0.5 > world.getTime()) return
       if (!holder) return
@@ -84,14 +89,14 @@ export default function App() {
       const avatar = world.getAvatar()
       const ray = avatar.getRay()
       const hit = world.raycast(ray)
-      if (hit?.entity.isAvatar) {
+      if (hit?.entity.isAvatar && hit.distance < attackRange) {
         const dmg = randomInt(minDamage, maxDamage)
         world.emit('katana-attack', { uid: hit.entity.uid, dmg })
       }
       const action = lastAction === 'attack1' ? 'attack2' : 'attack1'
       world.emote(action)
       swingSfx.play(true)
-      nextAllowedAttack = time + 0.5
+      nextAllowedAttack = time + attackSpeed
       lastAction = action
     }
     const onSomethingHeld = msg => {
@@ -107,7 +112,7 @@ export default function App() {
       world.off('pointer-up', onPointerUp)
       world.off('held', onSomethingHeld)
     }
-  }, [holder])
+  }, [holder, attackSpeed])
 
   useEffect(() => {
     if (!world.isServer) return
@@ -231,6 +236,11 @@ export function getStore(state = initialState) {
           state.deadHolder = holder
         }
       },
+      heal(state, holder, amt) {
+        if (state.holder !== holder) return
+        state.health += amt
+        if (state.health > 100) state.health = 100
+      },
       resetDeath(state) {
         state.deadHolder = null
       },
@@ -264,6 +274,18 @@ export function getStore(state = initialState) {
         label: 'Min Damage',
         type: 'float',
         initial: 33,
+      },
+      {
+        key: 'attackSpeed',
+        label: 'Attack Speed',
+        type: 'float',
+        initial: 0.5,
+      },
+      {
+        key: 'attackRange',
+        label: 'Attack Range',
+        type: 'float',
+        initial: 1.5,
       },
       {
         key: 'equipAudio',
