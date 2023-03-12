@@ -90,7 +90,7 @@ export default function App() {
         const dmg = randomInt(minDamage, maxDamage)
         world.emit('katana-attack', { uid: hit.entity.uid, dmg })
       }
-      world.emote('attack1')
+      world.emote('shoot')
       fireSfx.play(true)
       nextAllowedAttack = time + attackSpeed
     }
@@ -140,13 +140,7 @@ export default function App() {
 
   return (
     <app>
-      <emote
-        id="attack1"
-        src="Gunplay.fbx"
-        fadeIn={0.01}
-        fadeOut={0.075}
-        loop
-      />
+      <emote id="shoot" src="Gunplay.fbx" fadeIn={0.01} fadeOut={0.075} />
       {holder ? (
         <>
           <global>
