@@ -10,22 +10,19 @@ import {
   useEntityUid,
 } from 'hyperfy'
 
-// TODO: Add regen & field
-// TODO: Add hit speed field
-
 const v1 = new Vector3()
 const e1 = new Euler()
 
-const DEFAULT_MODEL = 'katana.glb'
-const DEFAULT_EQUIP_AUDIO = 'SwordEquip.mp3'
-const DEFAULT_SWING_AUDIO = 'SwordSwing.mp3'
+const DEFAULT_MODEL = 'gun.glb'
+const DEFAULT_EQUIP_AUDIO = 'gun-equip.mp3'
+const DEFAULT_FIRE_AUDIO = 'gun.mp3'
 
 export default function App() {
   const world = useWorld()
   const entityId = useEntityUid()
-  const swordRef = useRef()
+  const gunRef = useRef()
   const equipRef = useRef()
-  const swingRef = useRef()
+  const fireRef = useRef()
   const healthBarRef = useRef()
   const {
     pos,
@@ -33,19 +30,20 @@ export default function App() {
     mountedPos,
     mountedRot,
     scale,
-    swordModel,
+    gunModel,
     equipAudio,
-    swingAudio,
+    fireAudio,
     minDamage,
     maxDamage,
+    regenRate,
     attackSpeed,
     attackRange,
   } = useFields()
   const [s, dispatch] = useSyncState(s => s)
   const { holder, health, deadHolder } = s
-  const swingSfx = useFile(swingAudio) || DEFAULT_SWING_AUDIO
+  const fireSfx = useFile(fireAudio) || DEFAULT_FIRE_AUDIO
   const equipSfx = useFile(equipAudio) || DEFAULT_EQUIP_AUDIO
-  const sword = useFile(swordModel) || DEFAULT_MODEL
+  const gun = useFile(gunModel) || DEFAULT_MODEL
   const localUser = world.getAvatar()?.uid
 
   useEffect(() => {
@@ -55,31 +53,30 @@ export default function App() {
     dispatch('resetDeath')
   }, [deadHolder])
 
-  // * Attaches sword to parts of the body * //
+  // * Attaches gun to parts of the body * //
   useEffect(() => {
     if (!world.isClient) return
     if (!holder) return
-    const sword = swordRef.current
+    const gun = gunRef.current
     const healthBar = healthBarRef.current
     return world.onUpdate(delta => {
       const avatar = world.getAvatar(holder)
       avatar.getBonePosition('head', v1)
       healthBar.setPosition(v1)
       avatar.getBonePosition('rightHand', v1)
-      sword.setPosition(v1)
+      gun.setPosition(v1)
       avatar.getBoneRotation('rightHand', e1)
-      sword.setRotation(e1)
+      gun.setRotation(e1)
     })
   }, [holder])
 
   // * Handles attacks and sheathing * //
-  // only should run if local player is holding the sword
+  // only should run if local player is holding the gun
   useEffect(() => {
     if (!world.isClient) return
     if (!holder || holder !== localUser) return
     const pickupTime = world.getTime()
-    const swingSfx = swingRef.current
-    let lastAction = 'attack1'
+    const fireSfx = fireRef.current
     let nextAllowedAttack = -9999
     function onPointerUp(e) {
       if (pickupTime + 0.5 > world.getTime()) return
@@ -93,11 +90,9 @@ export default function App() {
         const dmg = randomInt(minDamage, maxDamage)
         world.emit('katana-attack', { uid: hit.entity.uid, dmg })
       }
-      const action = lastAction === 'attack1' ? 'attack2' : 'attack1'
-      world.emote(action)
-      swingSfx.play(true)
+      world.emote('attack1')
+      fireSfx.play(true)
       nextAllowedAttack = time + attackSpeed
-      lastAction = action
     }
     const onSomethingHeld = msg => {
       // semi-standard event called when any app "holds" an item
@@ -113,6 +108,17 @@ export default function App() {
       world.off('held', onSomethingHeld)
     }
   }, [holder, attackSpeed])
+
+  useEffect(() => {
+    // heal the holder for regenRate every second
+    if (!world.isServer) return
+    if (!holder) return
+    function regen() {
+      dispatch('heal', holder, regenRate)
+      setTimeout(regen, 1000)
+    }
+    setTimeout(regen, 1000)
+  }, [holder])
 
   useEffect(() => {
     if (!world.isServer) return
@@ -134,8 +140,13 @@ export default function App() {
 
   return (
     <app>
-      <emote id="attack1" src="Stable Sword Outward Slash.fbx" upperBody />
-      <emote id="attack2" src="Stable Sword Inward Slash.fbx" upperBody />
+      <emote
+        id="attack1"
+        src="Gunplay.fbx"
+        fadeIn={0.01}
+        fadeOut={0.075}
+        loop
+      />
       {holder ? (
         <>
           <global>
@@ -158,22 +169,22 @@ export default function App() {
                 />
               </panel>
             </billboard>
-            <group ref={swordRef}>
+            <group ref={gunRef}>
               <model
                 layer="HELD"
-                src={sword}
+                src={gun}
                 position={pos}
                 rotation={rot}
                 scale={scale}
               />
-              <audio ref={swingRef} src={swingSfx} spatial />
+              <audio ref={fireRef} src={fireSfx} spatial />
             </group>
           </global>
         </>
       ) : (
         <>
           <model
-            src={sword}
+            src={gun}
             onPointerDown={e => {
               const { uid } = e.avatar
               dispatch('equip', uid)
@@ -252,8 +263,8 @@ export function getStore(state = initialState) {
     },
     fields: [
       {
-        key: 'swordModel',
-        label: 'Sword Model',
+        key: 'gunModel',
+        label: 'Gun Model',
         type: 'file',
         accept: '.glb',
       },
@@ -276,6 +287,12 @@ export function getStore(state = initialState) {
         initial: 33,
       },
       {
+        key: 'regenRate',
+        label: 'Regen Rate',
+        type: 'float',
+        initial: 10,
+      },
+      {
         key: 'attackSpeed',
         label: 'Attack Speed',
         type: 'float',
@@ -294,8 +311,8 @@ export function getStore(state = initialState) {
         accept: '.mp3',
       },
       {
-        key: 'swingAudio',
-        label: 'Swing Sound',
+        key: 'fireAudio',
+        label: 'Fire Sound',
         type: 'file',
         accept: '.mp3',
       },
@@ -303,14 +320,15 @@ export function getStore(state = initialState) {
         key: 'pos',
         label: 'Position',
         type: 'vec3',
-        initial: [0.07, -0.07, 0],
+        initial: [-0.1, -0.05, 0],
       },
       {
         key: 'rot',
         label: 'Rotation',
         type: 'vec3',
-        initial: [-1.2, 0, 1.4],
+        initial: [-0.9, 0, 0.3],
       },
+
       {
         key: 'mountedPos',
         label: 'Mounted Position',
