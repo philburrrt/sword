@@ -11,13 +11,14 @@ import {
 } from 'hyperfy'
 
 // TODO: Add regen & field
+// TODO: Add hit speed field
 
 const v1 = new Vector3()
 const e1 = new Euler()
 
 const DEFAULT_MODEL = 'katana.glb'
-const DEFAULT_EQUIP_AUDIO = 'sword-equip.mp3'
-const DEFAULT_SWING_AUDIO = 'sword-equip.mp3'
+const DEFAULT_EQUIP_AUDIO = 'SwordEquip.mp3'
+const DEFAULT_SWING_AUDIO = 'SwordSwing.mp3'
 
 export default function App() {
   const world = useWorld()
@@ -37,7 +38,6 @@ export default function App() {
     swingAudio,
     minDamage,
     maxDamage,
-    regenRate,
     attackSpeed,
     attackRange,
   } = useFields()
@@ -113,17 +113,6 @@ export default function App() {
       world.off('held', onSomethingHeld)
     }
   }, [holder, attackSpeed])
-
-  useEffect(() => {
-    // heal the holder for regenRate every second
-    if (!world.isServer) return
-    if (!holder) return
-    function regen() {
-      dispatch('heal', holder, regenRate)
-      setTimeout(regen, 1000)
-    }
-    setTimeout(regen, 1000)
-  }, [holder])
 
   useEffect(() => {
     if (!world.isServer) return
@@ -285,12 +274,6 @@ export function getStore(state = initialState) {
         label: 'Min Damage',
         type: 'float',
         initial: 33,
-      },
-      {
-        key: 'regenRate',
-        label: 'Regen Rate',
-        type: 'float',
-        initial: 10,
       },
       {
         key: 'attackSpeed',

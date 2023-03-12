@@ -1,8 +1,0 @@
-{
-  "id": "guns-beta",
-  "name": "Guns",
-  "description": "It's a gun.",
-  "image": "image.png",
-  "category": "objects",
-  "public": false
-}
