@@ -17,7 +17,7 @@ const e1 = new Euler()
 
 const DEFAULT_MODEL = 'katana.glb'
 const DEFAULT_EQUIP_AUDIO = 'sword-equip.mp3'
-const DEFAULT_SWING_AUDIO = 'sword-equip.mp3'
+const DEFAULT_SWING_AUDIO = 'sword-swing.mp3'
 
 export default function App() {
   const world = useWorld()
