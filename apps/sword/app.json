@@ -1,8 +1,0 @@
-{
-  "id": "swords-beta",
-  "name": "Sword",
-  "description": "It's a sword.",
-  "image": "image.png",
-  "category": "objects",
-  "public": false
-}
