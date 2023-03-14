@@ -1,0 +1,8 @@
+{
+  "id": "weapon-beta",
+  "name": "Weapon",
+  "description": "Guns & Swords",
+  "image": "image.png",
+  "category": "objects",
+  "public": false
+}
