@@ -13,37 +13,45 @@ import {
 const v1 = new Vector3()
 const e1 = new Euler()
 
-const DEFAULT_MODEL = 'gun.glb'
-const DEFAULT_EQUIP_AUDIO = 'gun-equip.mp3'
-const DEFAULT_FIRE_AUDIO = 'gun.mp3'
-
-export default function App() {
+export const App = () => {
   const world = useWorld()
   const entityId = useEntityUid()
-  const gunRef = useRef()
+  const weaponRef = useRef()
   const equipRef = useRef()
-  const fireRef = useRef()
+  const attackRef = useRef()
   const healthBarRef = useRef()
   const {
+    mode,
     pos,
     rot,
     mountedPos,
     mountedRot,
     scale,
-    gunModel,
+    model,
     equipAudio,
-    fireAudio,
+    attackAudio,
     minDamage,
     maxDamage,
     regenRate,
     attackSpeed,
     attackRange,
   } = useFields()
+
+  const DEFAULT_MODEL = mode === 'sword' ? 'katana.glb' : 'gun.glb'
+  const DEFAULT_EQUIP_AUDIO =
+    mode === 'sword' ? 'sword-equip.mp3' : 'gun-equip.mp3'
+  const DEFAULT_ATTACK_AUDIO = mode === 'sword' ? 'sword.mp3' : 'gun.mp3'
+  const DEFAULT_POSITION =
+    mode === 'sword' ? [0.07, -0.07, 0] : [-0.1, -0.05, 0]
+  const DEFAULT_ROTATION = mode === 'sword' ? [-1.2, 0, 1.4] : [-0.9, 0, 0.3]
+
   const [s, dispatch] = useSyncState(s => s)
   const { holder, health, deadHolder } = s
-  const fireSfx = useFile(fireAudio) || DEFAULT_FIRE_AUDIO
+  const attackSfx = useFile(attackAudio) || DEFAULT_ATTACK_AUDIO
   const equipSfx = useFile(equipAudio) || DEFAULT_EQUIP_AUDIO
-  const gun = useFile(gunModel) || DEFAULT_MODEL
+  const position = model ? pos : DEFAULT_POSITION
+  const rotation = model ? rot : DEFAULT_ROTATION
+  const weapon = useFile(model) || DEFAULT_MODEL
   const localUser = world.getAvatar()?.uid
 
   useEffect(() => {
@@ -53,32 +61,33 @@ export default function App() {
     dispatch('resetDeath')
   }, [deadHolder])
 
-  // * Attaches gun to parts of the body * //
+  // * Attaches sword to parts of the body * //
   useEffect(() => {
     if (!world.isClient) return
     if (!holder) return
-    const gun = gunRef.current
+    const weapon = weaponRef.current
     const healthBar = healthBarRef.current
     return world.onUpdate(delta => {
       const avatar = world.getAvatar(holder)
       avatar.getBonePosition('head', v1)
       healthBar.setPosition(v1)
       avatar.getBonePosition('rightHand', v1)
-      gun.setPosition(v1)
+      weapon.setPosition(v1)
       avatar.getBoneRotation('rightHand', e1)
-      gun.setRotation(e1)
+      weapon.setRotation(e1)
     })
   }, [holder])
 
   // * Handles attacks and sheathing * //
-  // only should run if local player is holding the gun
+  // only should run if local player is holding the weapon
   useEffect(() => {
     if (!world.isClient) return
     if (!holder || holder !== localUser) return
     const pickupTime = world.getTime()
-    const fireSfx = fireRef.current
+    const attackSfx = attackRef.current
+    let lastAction = 'attack1'
     let nextAllowedAttack = -9999
-    function onPointerUp(e) {
+    const onPointerUp = e => {
       if (pickupTime + 0.5 > world.getTime()) return
       if (!holder) return
       const time = world.getTime()
@@ -90,9 +99,16 @@ export default function App() {
         const dmg = randomInt(minDamage, maxDamage)
         world.emit('katana-attack', { uid: hit.entity.uid, dmg })
       }
-      world.emote('shoot')
-      fireSfx.play(true)
+      let action
+      if (mode === 'sword') {
+        action = lastAction === 'attack1' ? 'attack2' : 'attack1'
+      } else if (mode === 'gun') {
+        action = 'shoot'
+      }
+      world.emote(action)
+      attackSfx.play(true)
       nextAllowedAttack = time + attackSpeed
+      lastAction = action
     }
     const onSomethingHeld = msg => {
       // semi-standard event called when any app "holds" an item
@@ -107,13 +123,13 @@ export default function App() {
       world.off('pointer-up', onPointerUp)
       world.off('held', onSomethingHeld)
     }
-  }, [holder, attackSpeed])
+  }, [holder, attackSpeed, mode])
 
   useEffect(() => {
     // heal the holder for regenRate every second
     if (!world.isServer) return
     if (!holder) return
-    function regen() {
+    const regen = () => {
       dispatch('heal', holder, regenRate)
       setTimeout(regen, 1000)
     }
@@ -140,7 +156,9 @@ export default function App() {
 
   return (
     <app>
-      <emote id="shoot" src="Gunplay.fbx" fadeIn={0.01} fadeOut={0.075} />
+      <emote id="attack1" src="Stable Sword Outward Slash.fbx" upperBody />
+      <emote id="attack2" src="Stable Sword Inward Slash.fbx" upperBody />
+      <emote id="shoot" src="Gunplay.fbx" fadeOut={1} upperBody />
       {holder ? (
         <>
           <global>
@@ -163,22 +181,22 @@ export default function App() {
                 />
               </panel>
             </billboard>
-            <group ref={gunRef}>
+            <group ref={weaponRef}>
               <model
                 layer="HELD"
-                src={gun}
-                position={pos}
-                rotation={rot}
+                src={weapon}
+                position={position}
+                rotation={rotation}
                 scale={scale}
               />
-              <audio ref={fireRef} src={fireSfx} spatial />
+              <audio ref={attackRef} src={attackSfx} spatial />
             </group>
           </global>
         </>
       ) : (
         <>
           <model
-            src={gun}
+            src={weapon}
             onPointerDown={e => {
               const { uid } = e.avatar
               dispatch('equip', uid)
@@ -214,6 +232,7 @@ export default function App() {
     </app>
   )
 }
+export default App
 
 const initialState = {
   holder: null,
@@ -221,7 +240,7 @@ const initialState = {
   deadHolder: null,
 }
 
-export function getStore(state = initialState) {
+export const getStore = (state = initialState) => {
   return {
     state,
     actions: {
@@ -257,10 +276,14 @@ export function getStore(state = initialState) {
     },
     fields: [
       {
-        key: 'gunModel',
-        label: 'Gun Model',
-        type: 'file',
-        accept: '.glb',
+        key: 'mode',
+        label: 'Mode',
+        type: 'switch',
+        options: [
+          { label: 'Sword', value: 'sword' },
+          { label: 'Gun', value: 'gun' },
+        ],
+        initial: 'sword',
       },
       {
         key: 'scale',
@@ -282,7 +305,7 @@ export function getStore(state = initialState) {
       },
       {
         key: 'regenRate',
-        label: 'Regen Rate',
+        label: 'Health Regen',
         type: 'float',
         initial: 10,
       },
@@ -290,7 +313,7 @@ export function getStore(state = initialState) {
         key: 'attackSpeed',
         label: 'Attack Speed',
         type: 'float',
-        initial: 0.5,
+        initial: 0.25,
       },
       {
         key: 'attackRange',
@@ -299,14 +322,25 @@ export function getStore(state = initialState) {
         initial: 1.5,
       },
       {
+        key: 'custom',
+        label: 'Custom Model Settings',
+        type: 'section',
+      },
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'file',
+        accept: '.glb',
+      },
+      {
         key: 'equipAudio',
         label: 'Equip Sound',
         type: 'file',
         accept: '.mp3',
       },
       {
-        key: 'fireAudio',
-        label: 'Fire Sound',
+        key: 'attackAudio',
+        label: 'Attack Sound',
         type: 'file',
         accept: '.mp3',
       },
@@ -314,15 +348,14 @@ export function getStore(state = initialState) {
         key: 'pos',
         label: 'Position',
         type: 'vec3',
-        initial: [-0.1, -0.05, 0],
+        initial: [0, 0, 0],
       },
       {
         key: 'rot',
         label: 'Rotation',
         type: 'vec3',
-        initial: [-0.9, 0, 0.3],
+        initial: [0, 0, 0],
       },
-
       {
         key: 'mountedPos',
         label: 'Mounted Position',
