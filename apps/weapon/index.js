@@ -286,12 +286,6 @@ export const getStore = (state = initialState) => {
         initial: 'sword',
       },
       {
-        key: 'scale',
-        label: 'Scale',
-        type: 'float',
-        initial: 1.0,
-      },
-      {
         key: 'maxDamage',
         label: 'Max Damage',
         type: 'float',
@@ -343,6 +337,12 @@ export const getStore = (state = initialState) => {
         label: 'Attack Sound',
         type: 'file',
         accept: '.mp3',
+      },
+      {
+        key: 'scale',
+        label: 'Scale',
+        type: 'float',
+        initial: 1.0,
       },
       {
         key: 'pos',
