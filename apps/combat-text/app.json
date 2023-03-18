@@ -1,0 +1,8 @@
+{
+  "id": "combat-text-beta",
+  "name": "Combat Text",
+  "description": "Displays Damage Taken",
+  "image": null,
+  "category": "objects",
+  "public": false
+}
