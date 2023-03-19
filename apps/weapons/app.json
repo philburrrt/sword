@@ -1,8 +1,0 @@
-{
-  "id": "weapons",
-  "name": "Weapons",
-  "description": "Guns & Swords",
-  "image": "image.png",
-  "category": "objects",
-  "public": false
-}
